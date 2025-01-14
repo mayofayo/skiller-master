@@ -30,12 +30,14 @@ public class PersonService {
         //person.setComment("comment");
         //return personRepository.findAll(Example.of(person, matcher));
 
-        //habe ab hier angefangen SQL-Queries zu verwenden.
+        //Hat nicht geklappt mit Examples; habe ab hier angefangen, SQL-Queries zu verwenden.
 
         List<Person> persons = personRepository.findAllPersonsWithComments();
         return persons;
     }
 
+
+    // das war die erste Funktion, die ich bearbeitet habe. Habe hier versucht, Examples zu verwenden; danach habe ich der Einfachheit halber zu SQL-Queries gewechselt.
     public List<Person> getAllPersonsFromCountries(String...countries) {
         ExampleMatcher matcher = ExampleMatcher.matching()
                 .withMatcher("country", ExampleMatcher.GenericPropertyMatcher::exact)
