@@ -25,7 +25,7 @@ public class SyncServiceTest {
     private List<SyncService.HrSystemVacation> vacations;
 
     @SuppressWarnings("FieldCanBeLocal")
-    private SyncService.HrSystemVacation v1_1, v1_2, v3_1, v3_2, v4_1, v4_2, v4_3, v5_1, v5_2, v5_3, v6_2, v6_3, v7_1, v7_3, v8_1, v8_2, v8_3, v9_1, v9_3, v10_1, v10_3, v11_1, v11_2, v12_1, v13_1, v14_1, v15_1;
+    private SyncService.HrSystemVacation v1_1, v1_2, v3_1, v3_2, v4_1, v4_2, v4_3, v5_1, v5_2, v5_3, v6_2, v6_3, v7_1, v7_3, v8_1, v8_2, v8_3, v9_1, v9_3, v10_1, v10_3, v11_1, v11_2, v12_1, v13_1, v14_1, v15_1, v15_2;
 
     @BeforeEach
     public void setUp() {
@@ -69,8 +69,10 @@ public class SyncServiceTest {
         v14_1 = SyncService.HrSystemVacation.builder().startDate(localDate(6)).endDate(localDate(10)).status("Abgelehnt").employeeID("141414").build();
 
         v15_1 = SyncService.HrSystemVacation.builder().startDate(localDate(6)).endDate(localDate(10)).status("Abgelehnt").employeeID("151515").build();
+        v15_2 = SyncService.HrSystemVacation.builder().startDate(localDate(6)).endDate(localDate(20)).status("Abgelehnt").employeeID("151515").build();
 
-        vacations = new ArrayList<>(List.of(v1_1, v1_2, v3_1, v3_2, v4_1, v4_2, v4_3, v5_1, v5_2, v5_3, v6_2, v6_3, v7_1, v7_3, v8_1, v8_2, v8_3, v9_1, v9_3, v10_1, v10_3, v11_1, v11_2, v12_1, v13_1, v14_1, v15_1));
+
+        vacations = new ArrayList<>(List.of(v1_1, v1_2, v3_1, v3_2, v4_1, v4_2, v4_3, v5_1, v5_2, v5_3, v6_2, v6_3, v7_1, v7_3, v8_1, v8_2, v8_3, v9_1, v9_3, v10_1, v10_3, v11_1, v11_2, v12_1, v13_1, v14_1, v15_1, v15_2));
     }
 
     private LocalDate localDate(int offsetDays) {
@@ -241,5 +243,6 @@ public class SyncServiceTest {
         syncService.makeChanges(vacations);
 
         verify(planningSystem, never()).createBooking(eq(v15_1));
+        verify(planningSystem, never()).createBooking(eq(v15_2));
     }
 }

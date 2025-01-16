@@ -48,7 +48,13 @@ public class SyncService {
             // if vacations but no absences, create all absences
             if (currentPersonVacations != null && currentPersonAbsences == null) {
                 for (HrSystemVacation vacation : currentPersonVacations) {
-                    planningSystem.createBooking(vacation);
+                    if(!vacation.getStatus().equals("Abgelehnt")) {
+                        planningSystem.createBooking(vacation);
+                    } else {
+                        currentPersonVacations.remove(vacation);
+                        break;
+                    }
+
                 }
                 continue;
             }
@@ -84,7 +90,9 @@ public class SyncService {
                     }
                 }
             }
-            System.out.print("hallo");
+
+
+
             if (currentPersonVacations.isEmpty() && !currentPersonAbsences.isEmpty()) {
                 for (PlanningSystem.Absence absence : currentPersonAbsences) {
                     planningSystem.deleteBooking(absence.getId());
@@ -94,11 +102,23 @@ public class SyncService {
 
             if (!currentPersonVacations.isEmpty() && currentPersonAbsences.isEmpty()) {
                 for (HrSystemVacation vacation : currentPersonVacations) {
-                    planningSystem.createBooking(vacation);
+                    if (!vacation.getStatus().equals("Abgelehnt")) {
+                        planningSystem.createBooking(vacation);
+                    }
                 }
                 continue;
             }
-            System.out.print("hallo");
+
+            for (PlanningSystem.Absence absence : currentPersonAbsences) {
+                for (HrSystemVacation vacation : currentPersonVacations) {
+                    if (!vacation.getStatus().equals("Abgelehnt")) {
+                        planningSystem.deleteBooking(absence.getId());
+                        planningSystem.createBooking(vacation);
+                        currentPersonVacations.remove(vacation);
+                    }
+                    break;
+                }
+            }
         }
 //        // ignore vacations of non-registered employees from HR-list
 //        List<HrSystemVacation> registeredEmployeesVacations = vacations.stream()
