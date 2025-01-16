@@ -92,7 +92,7 @@ public class SyncService {
             }
 
 
-
+            // process all remaining "easy" items like in step 1
             if (currentPersonVacations.isEmpty() && !currentPersonAbsences.isEmpty()) {
                 for (PlanningSystem.Absence absence : currentPersonAbsences) {
                     planningSystem.deleteBooking(absence.getId());
@@ -109,6 +109,7 @@ public class SyncService {
                 continue;
             }
 
+            // all remaining items are "hard" items where the dates differ and the absences need to be deleted and added new.
             for (PlanningSystem.Absence absence : currentPersonAbsences) {
                 for (HrSystemVacation vacation : currentPersonVacations) {
                     if (!vacation.getStatus().equals("Abgelehnt")) {
