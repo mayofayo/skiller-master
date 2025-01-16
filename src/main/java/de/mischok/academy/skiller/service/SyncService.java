@@ -6,7 +6,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -22,81 +24,157 @@ public class SyncService {
         // query the persons from planning system
         List<PlanningSystem.Person> persons = planningSystem.getAllPlanningSystemPersons();
 
-        // ignore vacations of non-registered employees from HR-list
-        List<HrSystemVacation> registeredEmployeesVacations = vacations.stream()
+        // map absences employeeIDs, also ignore vacations of non-registered employees from HR-list
+        Map<String, List<HrSystemVacation>> vacationsByEmployee = vacations.stream()
                 .filter(v -> persons.stream()
                         .anyMatch(p -> p.getId().equals(v.getEmployeeID())))
-                .collect(Collectors.toList());
+                .collect(Collectors.groupingBy(HrSystemVacation::getEmployeeID));
 
-        // create a list of absences not looked ab witch will be deleted afterward
-        List<String> absencesNotLookedAt = absences.stream().map(PlanningSystem.Absence::getId).collect(Collectors.toList());
+        // map vacations by employeeID
+        Map<String, List<PlanningSystem.Absence>> absencesByEmployee = absences.stream().collect(Collectors.groupingBy(PlanningSystem.Absence::getPersonId));
 
+        for (PlanningSystem.Person person : persons) {
+            List<PlanningSystem.Absence> currentPersonAbsences = absencesByEmployee.get(person.getId());
+            List<HrSystemVacation> currentPersonVacations = vacationsByEmployee.get(person.getId());
 
-        for (PlanningSystem.Absence absence : absences) {
-            for (HrSystemVacation vacation : registeredEmployeesVacations) {
-                if (!vacation.getEmployeeID().equals(absence.getPersonId())) {
-                    continue;
-                }
-
-                // if no changes needed don't change anything
-                if (vacation.getStartDate().equals(absence.getStartDate()) && vacation.getEndDate().equals(absence.getEndDate()) && vacation.getStatus().equals(absence.getStatus())) {
-                    registeredEmployeesVacations.remove(vacation);
-                    absencesNotLookedAt.remove(absence.getId());
-                    break;
-                }
-
-                // update on status change
-                else if (vacation.getStartDate().equals(absence.getStartDate()) && vacation.getEndDate().equals(absence.getEndDate()) && !vacation.getStatus().equals(absence.getStatus()) && !vacation.getStatus().equals("Abgelehnt")) {
-                    planningSystem.updateBooking(vacation, absence.getId());
-                    registeredEmployeesVacations.remove(vacation);
-                    absencesNotLookedAt.remove(absence.getId());
-                    break;
-                }
-
-                // remove if denied
-                else if (vacation.getStartDate().equals(absence.getStartDate()) && vacation.getEndDate().equals(absence.getEndDate()) && !vacation.getStatus().equals(absence.getStatus()) && vacation.getStatus().equals("Abgelehnt")) {
+            // if no vacations, delete all absences
+            if (currentPersonVacations == null && currentPersonAbsences != null) {
+                for (PlanningSystem.Absence absence : currentPersonAbsences) {
                     planningSystem.deleteBooking(absence.getId());
-                    registeredEmployeesVacations.remove(vacation);
-                    absencesNotLookedAt.remove(absence.getId());
-                    break;
                 }
+                continue;
+            }
 
-                // remove and create new if dates don't match
-                else if (!vacation.getStartDate().equals(absence.getStartDate()) && vacation.getEndDate().equals(absence.getEndDate()) && vacation.getStatus().equals(absence.getStatus())) {
-                    planningSystem.deleteBooking(absence.getId());
+            // if vacations but no absences, create all absences
+            if (currentPersonVacations != null && currentPersonAbsences == null) {
+                for (HrSystemVacation vacation : currentPersonVacations) {
                     planningSystem.createBooking(vacation);
-                    registeredEmployeesVacations.remove(vacation);
-                    absencesNotLookedAt.remove(absence.getId());
-                    break;
-                } else if (vacation.getStartDate().equals(absence.getStartDate()) && !vacation.getEndDate().equals(absence.getEndDate()) && vacation.getStatus().equals(absence.getStatus())) {
-                    planningSystem.deleteBooking(absence.getId());
-                    planningSystem.createBooking(vacation);
-                    registeredEmployeesVacations.remove(vacation);
-                    absencesNotLookedAt.remove(absence.getId());
-                    break;
                 }
+                continue;
+            }
 
-                // if nothing matches, remove absence
-                else {
+            if (currentPersonVacations == null) {
+                continue;
+            }
 
-                    planningSystem.deleteBooking(absence.getId());
-                    absencesNotLookedAt.remove(absence.getId());
-                    break;
+            List<HrSystemVacation> tempVacation = new ArrayList<>(currentPersonVacations);
+            for (HrSystemVacation vacation : tempVacation) {
+                for (PlanningSystem.Absence absence : currentPersonAbsences) {
+                    // no change
+                    if (vacation.getStartDate().equals(absence.getStartDate()) && vacation.getEndDate().equals(absence.getEndDate()) && vacation.getStatus().equals(absence.getStatus())) {
+                        currentPersonAbsences.remove(absence);
+                        currentPersonVacations.remove(vacation);
+                        break;
+                    }
+
+                    // status updated
+                    if (vacation.getStartDate().equals(absence.getStartDate()) && vacation.getEndDate().equals(absence.getEndDate()) && !vacation.getStatus().equals(absence.getStatus()) && !vacation.getStatus().equals("Abgelehnt")) {
+                        planningSystem.updateBooking(vacation, absence.getId());
+                        currentPersonAbsences.remove(absence);
+                        currentPersonVacations.remove(vacation);
+                        break;
+                    }
+
+                    // vacation denied
+                    if (vacation.getStartDate().equals(absence.getStartDate()) && vacation.getEndDate().equals(absence.getEndDate()) && !vacation.getStatus().equals(absence.getStatus()) && vacation.getStatus().equals("Abgelehnt")) {
+                        planningSystem.deleteBooking(absence.getId());
+                        currentPersonAbsences.remove(absence);
+                        currentPersonVacations.remove(vacation);
+                        break;
+                    }
                 }
             }
-        }
-
-        // delete all bookings that are not mentioned in vacations
-        for (String absenceId : absencesNotLookedAt) {
-            planningSystem.deleteBooking(absenceId);
-        }
-
-        // create all remaining vacations
-        for (HrSystemVacation vacation : registeredEmployeesVacations) {
-            if (!vacation.getStatus().equals("Abgelehnt")) {
-                planningSystem.createBooking(vacation);
+            System.out.print("hallo");
+            if (currentPersonVacations.isEmpty() && !currentPersonAbsences.isEmpty()) {
+                for (PlanningSystem.Absence absence : currentPersonAbsences) {
+                    planningSystem.deleteBooking(absence.getId());
+                }
+                continue;
             }
+
+            if (!currentPersonVacations.isEmpty() && currentPersonAbsences.isEmpty()) {
+                for (HrSystemVacation vacation : currentPersonVacations) {
+                    planningSystem.createBooking(vacation);
+                }
+                continue;
+            }
+            System.out.print("hallo");
         }
+//        // ignore vacations of non-registered employees from HR-list
+//        List<HrSystemVacation> registeredEmployeesVacations = vacations.stream()
+//                .filter(v -> persons.stream()
+//                        .anyMatch(p -> p.getId().equals(v.getEmployeeID())))
+//                .collect(Collectors.toList());
+//
+//        // create a list of absences not looked at to be deleted afterward
+//        List<String> absencesNotLookedAt = absences.stream().map(PlanningSystem.Absence::getId).collect(Collectors.toList());
+//
+//
+//        for (PlanningSystem.Absence absence : absences) {
+//            for (HrSystemVacation vacation : registeredEmployeesVacations) {
+//                if (!vacation.getEmployeeID().equals(absence.getPersonId())) {
+//                    continue;
+//                }
+//
+//                // if no changes needed don't change anything
+//                if (vacation.getStartDate().equals(absence.getStartDate()) && vacation.getEndDate().equals(absence.getEndDate()) && vacation.getStatus().equals(absence.getStatus())) {
+//                    registeredEmployeesVacations.remove(vacation);
+//                    absencesNotLookedAt.remove(absence.getId());
+//                    break;
+//                }
+//
+//                // update on status change
+//                else if (vacation.getStartDate().equals(absence.getStartDate()) && vacation.getEndDate().equals(absence.getEndDate()) && !vacation.getStatus().equals(absence.getStatus()) && !vacation.getStatus().equals("Abgelehnt")) {
+//                    planningSystem.updateBooking(vacation, absence.getId());
+//                    registeredEmployeesVacations.remove(vacation);
+//                    absencesNotLookedAt.remove(absence.getId());
+//                    break;
+//                }
+//
+//                // remove if denied
+//                else if (vacation.getStartDate().equals(absence.getStartDate()) && vacation.getEndDate().equals(absence.getEndDate()) && !vacation.getStatus().equals(absence.getStatus()) && vacation.getStatus().equals("Abgelehnt")) {
+//                    planningSystem.deleteBooking(absence.getId());
+//                    registeredEmployeesVacations.remove(vacation);
+//                    absencesNotLookedAt.remove(absence.getId());
+//                    break;
+//                }
+//
+//                // remove and create new if dates don't match
+//                else if (!vacation.getStartDate().equals(absence.getStartDate()) && vacation.getEndDate().equals(absence.getEndDate()) && vacation.getStatus().equals(absence.getStatus())) {
+//                    planningSystem.deleteBooking(absence.getId());
+//                    planningSystem.createBooking(vacation);
+//                    registeredEmployeesVacations.remove(vacation);
+//                    absencesNotLookedAt.remove(absence.getId());
+//                    break;
+//                } else if (vacation.getStartDate().equals(absence.getStartDate()) && !vacation.getEndDate().equals(absence.getEndDate()) && vacation.getStatus().equals(absence.getStatus())) {
+//                    planningSystem.deleteBooking(absence.getId());
+//                    planningSystem.createBooking(vacation);
+//                    registeredEmployeesVacations.remove(vacation);
+//                    absencesNotLookedAt.remove(absence.getId());
+//                    break;
+//                }
+//
+//                // if nothing matches, remove absence
+//                else {
+//
+//                    planningSystem.deleteBooking(absence.getId());
+//                    absencesNotLookedAt.remove(absence.getId());
+//                    break;
+//                }
+//            }
+//        }
+//
+//        // delete all bookings that are not mentioned in vacations
+//        for (String absenceId : absencesNotLookedAt) {
+//            planningSystem.deleteBooking(absenceId);
+//        }
+//
+//        // create all remaining vacations
+//        for (HrSystemVacation vacation : registeredEmployeesVacations) {
+//            if (!vacation.getStatus().equals("Abgelehnt")) {
+//                planningSystem.createBooking(vacation);
+//            }
+//        }
     }
 
     @Builder
